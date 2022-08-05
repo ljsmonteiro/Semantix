@@ -1,0 +1,104 @@
+1) docker exec -it namenode bash
+   hdfs dfs -mkdir -p /user/lucio/data
+   hdfs dfs -put /input/covid/*.csv /user/lucio/covid
+   hdfs dfs -ls /user/lucio/covid
+   hdfs dfs -cat /user/lucio/covid/HIST_PAINEL_COVIDBR_2020_Parte1_06jul2021.csv
+   hdfs dfs -cat /user/lucio/covid/HIST_PAINEL_COVIDBR_2020_Parte1_06jul2021.csv | head -n 3
+
+2) docker exec -it hive-server bash
+   beeline -u jdbc:hive2://localhost:10000
+   show databases;
+   create database semantix;
+   use semantix;
+
+
+1               2      3         4     5        6                7           8           9           10            11              12         13             14          15               16                    17
+regiao      ;estado;municipio ;coduf;codmun;codRegiaoSaude;nomeRegiaoSaude;data      ;semanaEpi;populacaoTCU2019;casosAcumulado;casosNovos;obitosAcumulado;obitosNovos;Recuperadosnovos;emAcompanhamentoNovos;interior/metropolitana
+Centro-Oeste;GO    ;Vianópolis;52   ;522200;52002         ;CENTRO SUL     ;2020-07-10;28       ;13863           ;62            ;5         ;              0;0          ;                ;                     ;0
+
+Brasil;;;76;;;;2020-02-25;9;210147125;0;0;0;0;;;
+Brasil;;;76;;;;2020-02-26;9;210147125;1;1;0;0;;;
+Brasil;;;76;;;;2020-02-27;9;210147125;1;0;0;0;;;
+Brasil;;;76;;;;2020-02-28;9;210147125;1;0;0;0;;;
+Brasil;;;76;;;;2020-02-29;9;210147125;2;1;0;0;;;
+Brasil;;;76;;;;2020-03-01;10;210147125;2;0;0;0;;;
+
+Centro-Oeste;GO;Vianópolis;52;522200;52002;CENTRO SUL;2020-07-10;28;13863;62;5;0;0;;;0
+Centro-Oeste;GO;Vianópolis;52;522200;52002;CENTRO SUL;2020-07-11;28;13863;63;1;0;0;;;0
+Centro-Oeste;GO;Vianópolis;52;522200;52002;CENTRO SUL;2020-07-12;29;13863;63;0;0;0;;;0
+
+create database covid19;
+show databases;
+use covid19;
+
+SET hive.exec.dynamic.partition = true;
+SET hive.exec.dynamic.partition.mode = nonstrict ;
+
+create table covid_dados_orig(
+regiao string,
+estado string,
+municipio  string,
+coduf int,
+codmun int,
+codRegiaoSaude int,
+nomeRegiaoSaude string, 
+data date,
+semanaEpi int,
+populacaoTCU2019 int,
+casosAcumulado int,
+casosNovos int,
+obitosAcumulado int,
+obitosNovos int,
+Recuperadosnovos int,
+emAcompanhamentoNovos int,
+interiormetropolitana int
+)
+
+row format delimited
+fields terminated by ';'
+stored as textfile
+location '/user/lucio/covid_dados';
+
+create table covid_municipio(
+regiao string,
+estado string,
+coduf int,
+codmun int,
+codRegiaoSaude int,
+nomeRegiaoSaude string, 
+data date,
+semanaEpi int,
+populacaoTCU2019 int,
+casosAcumulado int,
+casosNovos int,
+obitosAcumulado int,
+obitosNovos int,
+Recuperadosnovos int,
+emAcompanhamentoNovos int,
+interiormetropolitana int
+
+)
+partitioned by (municipio  string)
+row format delimited
+stored as textfile;
+
+show tables;
+desc formatted  covid_dados_orig;
+desc formatted  covid_municipio;
+
+select regiao, estado, data, casosacumulado from covid_dados_orig where estado ="PE" limit 10;
+
+insert overwrite table covid_municipio partition (municipio) select * from covid_dados_orig;
+
+show partitions covid_municipio;
+
+hdfs dfs -ls /user/hive/warehouse/covid19.db/covid_municipio
+
+KAFKA
+
+docker exec -it kafka bash
+kafka-topics.sh --bootstrap-server kafka:9092 --topic covid19 --create --partitions 2 --replication-factor 1
+kafka-topics.sh --bootstrap-server localhost:9092 --topic covid19 --describe
+
+kafka-console-producer.sh --broker-list localhost:9092 --topic painel-covid19
+
